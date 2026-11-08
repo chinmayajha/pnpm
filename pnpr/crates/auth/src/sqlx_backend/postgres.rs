@@ -31,7 +31,11 @@ impl SqlAuth<PostgresDatabase> {
             with_auth_timeout(settings.startup_timeout, startup_options.connect(&settings.url))
                 .await?;
         let startup_db = PostgresDatabase { pool: std::sync::Arc::new(startup_pool) };
-        with_auth_timeout(settings.startup_timeout, startup_db.init_schema()).await?;
+        with_auth_timeout(
+            settings.startup_timeout,
+            startup_db.init_schema(settings.startup_timeout),
+        )
+        .await?;
         startup_db.pool.close().await;
 
         let pool = pnpr_sql::postgres_pool(settings)?;
@@ -258,8 +262,13 @@ impl PostgresDatabase {
         Ok(if removed > 0 { UserRemoval::Removed } else { UserRemoval::NoSuchUser })
     }
 
-    async fn init_schema(&self) -> Result<()> {
-        crate::schema::migrate_postgres(&self.pool).await?;
+    async fn init_schema(&self, startup_timeout: std::time::Duration) -> Result<()> {
+        pnpr_sql::network::ensure_postgres_schema(
+            std::sync::Arc::clone(&self.pool),
+            startup_timeout,
+            "PostgreSQL auth database",
+        )
+        .await?;
         self.ensure_user_counter().await
     }
 

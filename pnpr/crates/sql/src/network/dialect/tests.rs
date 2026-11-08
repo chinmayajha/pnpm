@@ -45,19 +45,21 @@ fn mysql_conditional_upserts_keep_both_values_when_the_condition_fails() {
 
 #[test]
 fn dialect_schemas_have_the_same_tables_columns_and_keys() {
-    let original = schema_contract(crate::metadata::sql::schema::TABLES);
+    let original = schema_contract(crate::schema::TABLES);
     for dialect in [Dialect::Postgres, Dialect::Mysql] {
         assert_eq!(schema_contract(&dialect.tables()), original, "{dialect:?}");
     }
 }
 
 fn schema_contract(sql: &str) -> Vec<String> {
-    crate::metadata::sql::schema::statements(sql)
+    crate::schema::statements(sql)
         .filter(|statement| statement.starts_with("CREATE TABLE"))
         .map(|statement| {
             let end = statement.rfind(')').unwrap();
             statement[..=end]
                 .replace("VARBINARY(512)", "TEXT")
+                .replace("VARCHAR(512)", "TEXT")
+                .replace("VARCHAR(4096)", "TEXT")
                 .replace("LONGTEXT", "TEXT")
                 .replace("LONGBLOB", "BLOB")
                 .replace("BYTEA", "BLOB")

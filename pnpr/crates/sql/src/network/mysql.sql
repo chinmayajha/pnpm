@@ -200,6 +200,8 @@ CREATE TABLE IF NOT EXISTS publication_outcomes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 CREATE INDEX publication_outcomes_by_key
     ON publication_outcomes (principal, idempotency_key);
+CREATE INDEX publication_outcomes_by_committed_at
+    ON publication_outcomes (committed_at);
 
 -- Release notes of a package version (`kind` = 'version', `subject` = the
 -- version) or of a publication (`kind` = 'publication', `ecosystem` and
@@ -315,3 +317,32 @@ CREATE TABLE IF NOT EXISTS record_generation (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
 INSERT INTO record_generation (singleton, generation) VALUES (1, 0)
     ON DUPLICATE KEY UPDATE singleton = record_generation.singleton;
+
+-- Registered user accounts for SQL-backed auth.
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(512) NOT NULL PRIMARY KEY,
+    username VARCHAR(512) NOT NULL UNIQUE,
+    username_skeleton_hash VARCHAR(512) UNIQUE,
+    bcrypt_hash LONGTEXT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+
+-- Bearer tokens for SQL-backed and local SQLite auth.
+CREATE TABLE IF NOT EXISTS tokens (
+    token_hash VARCHAR(512) NOT NULL PRIMARY KEY,
+    user_id VARCHAR(512) NOT NULL,
+    created_at BIGINT NOT NULL,
+    last_used_at BIGINT NOT NULL,
+    readonly BIGINT NOT NULL DEFAULT 0,
+    cidr_whitelist VARCHAR(4096) NOT NULL DEFAULT '[]',
+    name VARCHAR(512),
+    expires_at BIGINT,
+    scopes LONGTEXT,
+    kind VARCHAR(512)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
+CREATE INDEX tokens_user_id ON tokens (user_id);
+
+-- Monotonic and reconciled counters for SQL-backed auth.
+CREATE TABLE IF NOT EXISTS auth_counters (
+    name VARCHAR(512) NOT NULL PRIMARY KEY,
+    value BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs;
