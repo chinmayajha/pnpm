@@ -159,19 +159,11 @@ async fn sweep_query_plan(db: &Db) -> Vec<String> {
     .unwrap()
 }
 
-async fn expired_outcomes_are_swept_by_committed_at_index(db: Db) {
+async fn assert_sweep_uses_committed_at_index(db: Db) {
     let storage = storage(&db);
-    let database = storage.sql_metadata();
     commit(
-        database,
+        storage.sql_metadata(),
         vec![document("core", &packument("core", &["1.0.0"]))],
-        request("stale", None),
-    )
-    .await
-    .unwrap();
-    commit(
-        database,
-        vec![document("widgets", &packument("widgets", &["1.0.0"]))],
         request("retained", None),
     )
     .await
@@ -188,6 +180,37 @@ async fn expired_outcomes_are_swept_by_committed_at_index(db: Db) {
             .any(|detail| detail.contains("SCAN publication_outcomes")),
         "{plan:?}",
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sqlite_sweeps_by_committed_at_index() {
+    assert_sweep_uses_committed_at_index(Db::sqlite()).await;
+}
+
+#[cfg(feature = "backend-libsql")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn libsql_sweeps_by_committed_at_index() {
+    assert_sweep_uses_committed_at_index(Db::libsql(false).await).await;
+    assert_sweep_uses_committed_at_index(Db::libsql(true).await).await;
+}
+
+async fn expired_outcomes_are_swept(db: Db) {
+    let storage = storage(&db);
+    let database = storage.sql_metadata();
+    commit(
+        database,
+        vec![document("core", &packument("core", &["1.0.0"]))],
+        request("stale", None),
+    )
+    .await
+    .unwrap();
+    commit(
+        database,
+        vec![document("widgets", &packument("widgets", &["1.0.0"]))],
+        request("retained", None),
+    )
+    .await
+    .unwrap();
 
     execute(
         &db,
@@ -482,7 +505,7 @@ conformance! {
     a_release_record_must_describe_its_version,
     a_batch_commits_every_package_under_one_generation_or_none,
     a_retried_request_gets_its_recorded_outcome,
-    expired_outcomes_are_swept_by_committed_at_index,
+    expired_outcomes_are_swept,
     an_unpublished_member_invalidates_the_recorded_outcome,
     publications_are_found_by_id_name_and_member,
     a_version_written_outside_a_publish_request_gets_a_publication,
